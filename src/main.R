@@ -34,6 +34,11 @@ Enum <- function(...) {
   res
 }
 
+# sections of flight log: flight metadata, aircraft info, activities recap (1st
+#   page, later pages, ending table), activity descriptions (1st page, later pages)
+SECT <- Enum(META, AIRCRAFT, RECAP_START, RECAP_CONTD, RECAP_END, DESC_START, DESC_CONTD)
+# now sections is an "enum" w the four main sections of the pdf log
+
 # check whether input set of words is within provided bounds of OCR'ed data;
 # if not, stop the program with an error.
 #   ocr_data: OCR data to check through, from local (Tesseract) OCR
@@ -100,12 +105,6 @@ simple_crop <- function(image, height, y_offset = 0) {
   return (magick::image_crop(image, geometry = paste0(3250, 'x', height,'+50+', y_offset)))
 }
 
-# sections of flight log: flight metadata, aircraft info, activities recap (1st
-#   page, later pages, ending table), activity descriptions (1st page, later pages)
-SECT <- Enum(META, AIRCRAFT, RECAP_START, RECAP_CONTD, RECAP_END, DESC_START, DESC_CONTD)
-# now sections is an "enum" w the four main sections of the pdf log
-
-api_key_usage <- 0
 # get_table: Get the OCRed table from ExtractTable in an R-readable format
 # optionally, find word- and row-level redactions and include these
 #   image: The ImageMagick image of the table to extract text from
@@ -459,6 +458,8 @@ get_redacted_table <- function(parsed_resp, img) {
 #################
 
 pages <- pdftools::pdf_info(PDF_PATH)$pages
+
+api_key_usage <- 0
 
 cur_sect <- SECT$META
 page_already_setup <- FALSE
