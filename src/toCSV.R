@@ -1,3 +1,6 @@
+# final CSV will be saved at `logs_var_name`.csv in the current directory
+# (use setwd("path/to/directory") to set, and getwd() to check, the directory
+# where the CSV will be saved)
 logs_var_name <- 'logs_NEW_23_8654_final'
 logs <- get(logs_var_name)
 
@@ -7,6 +10,9 @@ logs <- get(logs_var_name)
 logs <- lapply(seq_along(logs), function(i) {
   log <- logs[[i]]
   
+  # check for merged headers (e.g., combined Time Start and End columns yielding
+  # "Start End" column rather than separate "Start" and "End" columns) and fix
+  # them by splitting by space
   aircraft <- log$aircraft$extracttable_ocr
   if (ncol(aircraft) != 19) {
     cols <- aircraft %>%
@@ -26,11 +32,13 @@ logs <- lapply(seq_along(logs), function(i) {
   
   
   
+  # check all activity descriptions tables have four columns as expected
   if (!all(sapply(log$descriptions$extracttable_ocrs,
                   function(tib) { ncol(tib) == 4 }))) {
     print(paste(i, 'descriptions table'))
   }
   
+  # check for 17 meta table columns, as expected
   meta <- log$meta$extracttable_ocr
   if (ncol(meta) != 17 & ncol(meta) >= 14) {
     first_row <- meta[1, 14:ncol(meta)]
@@ -57,6 +65,7 @@ logs <- lapply(seq_along(logs), function(i) {
   }
   log$meta$extracttable_ocr <- meta
   
+  # insert fixed log
   logs[[i]] <- log
 })
 
@@ -83,7 +92,7 @@ for (i in 1:length(logs)) {
     # note that realistically we should just note that some activities are redacted
     # and still process those that are present. in practice it seems the redacted_contd
     # implies the redacted first page always. but if this isn't the case, we just
-    # need to update the toCSV code to handle this case.
+    # need to update the following code to handle this case.
   }
   
   
@@ -157,7 +166,7 @@ for (i in 1:length(logs)) {
       ungroup()
     names(descriptions)[1:4] <- c('act_no', 'location', 'area', 'comments')
     
-    # this is somewhat strange handling of flights:
+    # note, this is the handling of flights used:
     #  - activities that don't have a matching flight (by start/end time) get '?' as flight # (above)
     #  - flights that aren't matched to any activities get a log entry (below)
     # often times there's only two flights and they *should* be matched to all activities,
@@ -199,7 +208,7 @@ for (i in 1:length(logs)) {
   aircraft <- log$aircraft$extracttable_ocr
   # already checked columns earlier w flight_times
   
-  # cutting off last 6 columns because OCR doesn't pick them up
+  # cutting off last 6 columns because OCR doesn't pick them up (checkboxes)
   names(aircraft) <- c('flight', 'flight_time_start', 'flight_time_end', 'hobbs_meter_start',
                        'hobbs_meter_end', 'flight_time', 'fuel_loc', 'fuel_gal',
                        'abort_code', 'abort_time', 'maint_hobbs_start', 'maint_hobbs_end',

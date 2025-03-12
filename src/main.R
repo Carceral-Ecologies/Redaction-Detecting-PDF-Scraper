@@ -7,15 +7,22 @@ source('./extracttable_functions.R')
 
 # --- config options ---
 
+# whether or not to call ExtractTable and save results
 CALL_EXTRACTTABLE <- TRUE
-# lah_doc <- '~/Desktop/Projects/CE/heli-testing/First Release Sept.pdf'
-lah_doc <- '~/Desktop/Projects/CE/heli-testing/23-8654-Final.pdf'
+# path to PDF to scrape
+PDF_PATH <- '~/Desktop/Projects/CE/heli-testing/23-8654-Final.pdf'
+# whether or not to prompt in console after each image is cropped
+PROMPT_AFTER_CROP <- FALSE
+# whether or not to save images of sections of PDF
+SAVE_IMAGES <- FALSE
+# where to save images to (ensure the folder is created)
+SAVED_IMAGE_PATH <- 'test_images'
 
 ###########################
 ### FUNCTIONS AND SETUP ###
 ###########################
 
-# https://stackoverflow.com/a/44152358
+# https://stackoverflow.com/a/44152358 to emulate C(++) enum
 Enum <- function(...) {
   values <- sapply(match.call(expand.dots = TRUE)[-1L], deparse)
   
@@ -27,6 +34,17 @@ Enum <- function(...) {
   res
 }
 
+# check whether input set of words is within provided bounds of OCR'ed data;
+# if not, stop the program with an error.
+#   ocr_data: OCR data to check through, from local (Tesseract) OCR
+#   words: array of words to check for (should be lowercase if case_sensitive
+#     is FALSE or not provided)
+#   top_lim: y coordinate (starting from top) to check below
+#   bot_lim: y coordinate (starting from top) to check above
+#   thresh: minimum number of words found to consider a success
+#   err: error message to stop program with if threshold not reached
+#   case_sensitive: whether to perform case-sensitive checking (default false)
+# returns the list of matching words
 check_for_text <- function(ocr_data, words, top_lim, bot_lim, thresh, err,
                            case_sensitive = FALSE) {
   if (case_sensitive) {
@@ -44,6 +62,14 @@ check_for_text <- function(ocr_data, words, top_lim, bot_lim, thresh, err,
   return (matching)
 }
 
+# generate and print preview text for current section of PDF, and if enabled,
+# save image with that same name and prompt to continue
+#   image: image of currently cropped section
+#   page: current page number
+#   sect: current section (of type SECT)
+#   meta: whether in the "meta" section of activity descriptions
+# also depends on global config variables SAVE_IMAGES and PROMPT_AFTER_CROP
+# returns: preview text for current section
 preview <- function(image, page, sect, meta = FALSE) {
   sect <- switch(sect, 'meta', 'aircraft', 'recap start', 'recap contd',
                  'recap end', 'description start', 'description contd')
@@ -55,16 +81,21 @@ preview <- function(image, page, sect, meta = FALSE) {
   
   print(preview_text)
   
-  # magick::image_write(image, path = "temp.png")
-  # magick::image_write(image, path = paste0('test_images/', preview_text, '.png'))
+  if (SAVE_IMAGES)
+    magick::image_write(image, path = file.path(SAVE_IMAGE_PATH, paste0(preview_text, '.png')))
   
-  # readline(prompt="Press [enter] to continue")
+  if (PROMPT_AFTER_CROP)
+    readline(prompt="Press [enter] to continue")
   
   return (preview_text)
 }
 
-# note: this crops 50px off the left, since there's usually a noticeable paper
-# edge there (from scanning). this shouldn't ever cut into data.
+# crop 50px off the left (there's usually a noticeable paper edge there, from
+# scanning -- this should never cut into data)
+#   image: image to crop
+#   height: height of image
+#   y_offset: y cropping from the top, if applicable (default 0)
+# returns: cropped image (Magick)
 simple_crop <- function(image, height, y_offset = 0) {
   return (magick::image_crop(image, geometry = paste0(3250, 'x', height,'+50+', y_offset)))
 }
@@ -76,11 +107,11 @@ SECT <- Enum(META, AIRCRAFT, RECAP_START, RECAP_CONTD, RECAP_END, DESC_START, DE
 
 api_key_usage <- 0
 # get_table: Get the OCRed table from ExtractTable in an R-readable format
-#    optionally, find word- and row-level redactions and include these
-#  * image: The ImageMagick image of the table to extract text from
-#  * find_redactions (default false): Whether to also find redactions within
-#    the image and insert them into the returned table text. At present should
-#    only be used for the activity comments section.
+# optionally, find word- and row-level redactions and include these
+#   image: The ImageMagick image of the table to extract text from
+#   find_redactions (default false): Whether to also find redactions within
+#     the image and insert them into the returned table text. At present should
+#     only be used for the activity comments section.
 get_table <- function(image, find_redactions = FALSE) {
   et_resp <- image %>%
     ExtractTable(extracttable_api_key)
@@ -105,6 +136,14 @@ get_table <- function(image, find_redactions = FALSE) {
   return (table)
 }
 
+# "crop" Tesseract OCR data to within supplied coordinate bounds (i.e., return
+# only the words within the given bounds in the data)
+#   ocr_data: Tesseract data to crop
+#   top_lim: furthest up possible y-coordinate (lowest number; starting from 0)
+#   bot_lim: furthest down possible y-coordinate (highest number)
+#   left_lim: furthest left possible x-coordinate (lowest number)
+#   right_lim: furthest right possible x-coordinate (highest number)
+# returns: the subset of ocr_data that lies within supplied bounds
 crop_local_ocr <- function(ocr_data, top_lim, bot_lim, left_lim, right_lim) {
   if (missing(left_lim) | missing(right_lim)) {
     return (filter(ocr_data, top > top_lim & bot < bot_lim))
@@ -118,6 +157,11 @@ crop_local_ocr <- function(ocr_data, top_lim, bot_lim, left_lim, right_lim) {
 ### WORD-LEVEL REDACTION DETECTION ###
 ######################################
 
+# generate a string to represent an in-text redaction of given width, using a
+# average character width of 16.32 pixels (see readme for details)
+#   width: the width, in pixels, of the redaction
+# returns: string in the format "[***]" where there is approximately one asterisk
+#   per redacted character
 create_redaction_string <- function(width) {
   return(paste0(
     "[",
@@ -136,9 +180,10 @@ create_redaction_string <- function(width) {
 #
 # get_redacted_table: Process a response from ExtractTable, in tandem with the original
 # image used to get that response, to output a table with word- and row-level redactions
-# detected and included.
-#  * parsed_resp: The raw response from the ExtractTable API
-#  * img: The image used to get the aforementioned response
+# detected and included. (See readme for more details)
+#   parsed_resp: The raw response from the ExtractTable API
+#   img: The image used to get the aforementioned response
+# returns: table of text data, as a dataframe, with redactions inserted
 get_redacted_table <- function(parsed_resp, img) {
   # process image to only contain black squares
   f_ <- tempfile(fileext = ".png")
@@ -216,7 +261,7 @@ get_redacted_table <- function(parsed_resp, img) {
       y_max = round(y_max_raw * height)
     )
   
-  # insert redactions into cells where redaction component overlaps
+  # insert redactions into cells where detected redaction component overlaps
   redacted_cells <- lapply(parsed_resp[["Tables"]][["TableCoordinates"]], function(row) {
     lapply(row, function(cell) { # cell: given-to-us coords of a table cell (as proportions)
       if (length(cell[[1]]) == 0 | nrow(components) == 0)
@@ -301,7 +346,7 @@ get_redacted_table <- function(parsed_resp, img) {
   # components <- filter(components, width <= 2500) # update remaining components
   # now: inserting all remaining redactions, but distinguishing those that don't
   #   seem wide enough to be a row when writing text (see "insert redacted rows"
-  #   comment section below)
+  #   section below)
   row_redactions <- components %>% arrange(y)
   
   # get middle of each detected row's coordinates
@@ -413,7 +458,7 @@ get_redacted_table <- function(parsed_resp, img) {
 ### MAIN CODE ###
 #################
 
-pages <- pdftools::pdf_info(lah_doc)$pages
+pages <- pdftools::pdf_info(PDF_PATH)$pages
 
 cur_sect <- SECT$META
 page_already_setup <- FALSE
@@ -446,7 +491,7 @@ while (page < pages) {
     # setup new page
     page <- page + 1
     
-    image <- lah_doc %>%
+    image <- PDF_PATH %>%
       magick::image_read_pdf(pages=page)
     info <- image %>%
       magick::image_info()
@@ -474,7 +519,7 @@ while (page < pages) {
     # --- set up new log
     cur_log <- list(
       log_meta = list(
-        filename = basename(lah_doc),
+        filename = basename(PDF_PATH),
         file_total_pages = pages,
         file_start_page = page,
         present_pages = c(),
@@ -497,9 +542,9 @@ while (page < pages) {
   if (cur_sect == SECT$META) {
     # count number of rows matching the following conditions:
     #   is one of Air Support Division Daily Log
-    #   y pixel height is between 50 and 250??
+    #   y pixel height is between 50 and 250
     # and if count is < 3 ERROR (description of check_for_text fxn)
-    title_words <- c('air', 'support', 'division', 'daily', 'log') # CONST
+    title_words <- c('air', 'support', 'division', 'daily', 'log')
     title <- check_for_text(local_ocr, title_words, 50, 250, 3,
                             'Could not find Air Support Division Daily Log header')
     
@@ -507,8 +552,8 @@ while (page < pages) {
     log_header_bot <- title$bot %>%
       mean() %>%
       round()
-    table_top <- log_header_bot + 100 # CONST meta table offset
-    table_bot <- table_top + 150 # CONST meta table height
+    table_top <- log_header_bot + 100
+    table_bot <- table_top + 150
     
     # count number of table headers matching the following:
     #   is one of the table headers
@@ -670,7 +715,8 @@ while (page < pages) {
       cur_log$recap$local_ocrs <- cur_log$recap$local_ocrs %>%
         append(list(crop_local_ocr(local_ocr, table_top, table_bot)))
       
-      # have spreadsheet provided to do this instead!
+      # not reliably extracted using ExtractTable + we have another source for
+      # this data
       # if (CALL_EXTRACTTABLE)
       #   cur_log$recap$extracttable_ocrs <- cur_log$recap$extracttable_ocrs %>%
       #     append(list(get_table(table_image)))
@@ -749,15 +795,11 @@ while (page < pages) {
     table_image <- image %>%
       simple_crop(2550 - footer_top, footer_top) # was footer_bot - footer_top before
     
-    # prolly don't call extractable?? only a small footer, might be better
-    # to just have this be manual entry (+ dates are handwritten and most
-    # of these are redacted)
-    # (in which case, probably crop to bottom of page so we can read all the
-    #  handwriting when doing manual data entry)
     cur_log$recap_end$image <- preview(table_image, page, cur_sect)
     cur_log$recap_end$local_ocr <- crop_local_ocr(local_ocr, footer_top, 2550)
     
-    # no extracttable call!
+    # no extracttable call; only a small footer with often handwritten or redacted
+    # text, so not worth an API call
     
     cur_sect <- SECT$DESC_START
     next
@@ -802,7 +844,7 @@ while (page < pages) {
     cur_log$description_meta$local_ocr <- crop_local_ocr(local_ocr, meta_top, meta_bot)
     
     # redundant data from the meta section, but names are fully spelt out.
-    # not quite worth an extracttable call, since local OCR is quite good with
+    # not quite worth an ExtractTable call, since local OCR is quite good with
     # alphabet recognition (not so much alphanumeric)
     cur_log$description_meta$local_table <- data.frame(
       TFO = local_ocr %>%
@@ -832,7 +874,7 @@ while (page < pages) {
         paste(collapse = ' ')
     )
     
-    # no extracttable call for desc meta!
+    # no ExtractTable call for desc meta!
     
     if (no_activities) {
       print('No activities descriptions because there are no activities...')
@@ -843,7 +885,7 @@ while (page < pages) {
     desc_table_headers <- c('act', 'no.', 'location', 'area', 'comments')
     local_desc_table <- check_for_text(local_ocr, desc_table_headers, meta_bot, meta_bot + 100, 0)
     
-    # should be before page x of y without ever hitting bottom of table
+    # should be before 'page x of y' without ever hitting bottom of table
     desc_bot <- 2550 - 150
     
     # threshold for number of words before redaction: 5 rn but could change
@@ -892,8 +934,8 @@ while (page < pages) {
     }
     
     # check whether redacted; this assumes that the headers above ^ are not redacted
-    # (if they are, the program can't really tell whether we're on a new log or
-    # we're in a redacted section without detecting big black boxes somehow...)
+    # potential, if necessary TODO: also detect large black boxes to determine
+    # whether activity descriptions are redacted
     desc_bot <- 2550 - 170
     if (nrow(filter(local_ocr, top > (headers$bot %>% mean() %>% round()) & bot < desc_bot)) < 5) {
       print('REDACTED continued activities descriptions')
@@ -923,7 +965,7 @@ while (page < pages) {
   }
 }
 
-# this code: add final page outside of while loop
+# this code adds the final page after the while loop has finished
 
 # detect pages text (same code as beginning of while loop)
 bottom_pages_text <- suppressWarnings(local_ocr %>%

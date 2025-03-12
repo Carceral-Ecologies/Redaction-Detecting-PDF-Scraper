@@ -1,4 +1,5 @@
 # Thank you to Michael Everett from UCLA Law for providing this file!
+# (Some modifications have been made with final handling)
 
 #' Parse API response from extractable
 #'
