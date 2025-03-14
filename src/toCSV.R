@@ -2,13 +2,13 @@
 # (use setwd("path/to/directory") to set, and getwd() to check, the directory
 # where the CSV will be saved)
 logs_var_name <- 'logs_NEW_23_8654_final'
-logs <- get(logs_var_name)
+to_csv_logs <- get(logs_var_name)
 
 # PRECHECK that all logs are valid sizes
 # (if this prints anything, __must__ fix those logs before converting to CSV)
 # (this code block will automatically fix common issues with table sizing)
-logs <- lapply(seq_along(logs), function(i) {
-  log <- logs[[i]]
+to_csv_logs <- lapply(seq_along(to_csv_logs), function(i) {
+  log <- to_csv_logs[[i]]
   
   # check for merged headers (e.g., combined Time Start and End columns yielding
   # "Start End" column rather than separate "Start" and "End" columns) and fix
@@ -66,7 +66,7 @@ logs <- lapply(seq_along(logs), function(i) {
   log$meta$extracttable_ocr <- meta
   
   # insert fixed log
-  logs[[i]] <- log
+  to_csv_logs[[i]] <- log
 })
 
 
@@ -74,8 +74,8 @@ logs <- lapply(seq_along(logs), function(i) {
 
 output_csv <- NULL
 
-for (i in 1:length(logs)) {
-  log <- logs[[i]]
+for (i in 1:length(to_csv_logs)) {
+  log <- to_csv_logs[[i]]
   # print(i)
   
   # special checks
