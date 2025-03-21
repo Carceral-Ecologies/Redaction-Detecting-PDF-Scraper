@@ -12,7 +12,7 @@ TODO add table of contents
 
 ### Quick start
 
-This is a brief overview of getting the program running. For more info, see the below sections.
+This is a an abbreviated guide to getting the program running. For more details, see the below sections.
 
 -   Install [R and RStudio](https://posit.co/download/rstudio-desktop/)
 -   Install the pdftools, magick, tidyverse, and tesseract R packages using `install.packages()` in RStudio console
@@ -45,7 +45,7 @@ For in-text redaction detection (detecting black boxes), this R script uses the 
 -   You can verify whether ImageMagick is installed by running `magick -version` in your terminal. This should result in an info screen about the version installed, not a "command not found" error.
 -   On macOS, the easiest method of installation is to install [Homebrew](https://brew.sh/) and then run `brew install magick` in a terminal.
 
-Finally, this program uses an online web service/API called [ExtractTable](https://extracttable.com/) to recognize and extract structured table data from images, with built-in table detection and higher text recognition accuracy than locally. Acquire an API key for "Extra" credits -- you will need roughly 1.3x as many credits as pages of PDF you plan to extract data from.
+Finally, this program uses an online web service/API called [ExtractTable](https://extracttable.com/) to recognize and extract structured table data from images, with built-in table detection and higher text recognition accuracy than locally. Acquire an API key for "Extra" credits -- you will need roughly 1.3x as many credits as pages of PDF you plan to extract data from, maybe more for testing.
 
 ### Configuration {#configuration}
 
@@ -84,7 +84,7 @@ After opening and setting up `main.R`, simply run the file from top to bottom! T
 Upon completion of the above, you should have a `logs` variable in RStudio. You can inspect it by hand by clicking on it in the Environment tab on the right.
 
 -   I would suggest copying the variable to a name representative of the file it holds. For example, by running `logs_sep_1 <- logs` in the console.
--   You can save a copy of this R data formatted object with [saveRDS](https://rstudio-education.github.io/hopr/dataio.html#r-files) to keep it for further usage with R. If you're only interested in the CSV output, this is not necessary; continue to the next section
+-   You can save a copy of this R data formatted object with [saveRDS](https://rstudio-education.github.io/hopr/dataio.html#r-files) to keep it for further usage with R. If you're only interested in the CSV output, this is not necessary, but can be useful for debugging.
     -   For example, by running `saveRDS(logs_sep_1, file = "logs_sep_1.RDS")` in the console.
 
 #### Converting PDF data to CSV in toCSV.R
@@ -106,16 +106,6 @@ Check the `example` directory for example PDFs and their output after running th
     -   You can load the .RDS file in RStudio using [load](https://rstudio-education.github.io/hopr/dataio.html#r-files)
 -   A `.csv` file with the output of converting the above `logs` variable to a CSV in `toCSV.R`
 
-## Data Format
-
-### logs variable
-
-TODO describe logs variable (final output of main.R)
-
-### CSV output
-
-TODO describe CSV column headers and where they all come from
-
 ## Design
 
 ### Brief overview of main.R
@@ -131,6 +121,42 @@ Within the main section:
 
 -   The section is split into sections, each corresponding to a section within the PDF itself (e.g., the table at the beginning describing the overall "flights" of each log; the activites 'recap' section; and the activity descriptions section with more wordy descriptions). The structure of each section is very similar across sections, yet with enough difference that function calls for the "work" of each section would only make the code harder to understand.
 -   A similarly uncommon design decision, there are many literals used within the code that, in general programming practice, would be better declared as named constants. However, each of these literals is used only once, and makes more sense in the context in which it is used (as the sections follow the flow of the PDF order). For debugging potential needs to change pixel offsets for different sections, it is thus more straightforward to edit these literals directly where they're used.
+
+#### logs variable data format
+
+The logs variable is the intermediary between the main program, which extracts text and detects redactions, and the smaller secondary script, which converts this data to a CSV format. A logs variable is a list of each detected log on the PDF; each log itself is 2 to 4 PDF pages with different sections of the log:
+
+-   `meta`: The metadata table at the top of the log with data pertaining to the whole log
+-   `aircraft`: The "Aircraft Information" table with information about timing, mileage, and more of each "flight" within the log (generally 1 to 2 flights per log)
+-   `recap`: The "Activities Recap" table with metadata about individual "activities"
+    -   ExtractTable does not process this table well and we have another source for it, so in this program this table is primarily used for its activity start/end times. These are used in the process of matching activities to flights in CSV conversion.
+-   `recap_end`: The text at the bottom of the recap section; largely ignored by us
+-   `description_meta`: The text before the activity comments section
+    -   Here a table `local_table` is created without ExtractTable since this text is redundant and well-read by the local OCR
+-   `descriptions`: The most important component of this program! The activity comments section, with detailed text entries recounting each activity. Here, precise redaction detection is used to detect black boxes within the text
+
+Each of the above variables has the following properties:
+
+-   `image`: The name of the image file of this section (useful for reference if saving cropped images)
+-   `local_ocr`: The local OCR using the tesseract package of the text within this section; contains only words and their locations, not a full table
+-   `extracttable_ocr`: The table of text recognized via ExtractTable, with redaction detection if applicable
+    -   Further containing a list with `table` — the table itself — and `response` — the full JSON response from ExtractTable, for debugging
+
+Note that for `recap` and `descriptions`, the latter two variables above are plural and are lists of their respective data rather than a standalone, owing to the possibility of multiple pages of data.
+
+Finally, each log contains the following variables in addition to each of the sections outlined above:
+
+-   `log_meta`: A variable containing metadata about the log, including:
+    -   `filename`: The PDF file's name
+    -   `file_total_pages`: The PDF file's length, in pages
+    -   `file_start_page` and `file_end_page`: The start and end pages to the current log
+    -   `present_pages` and `num_pages`: If detected with local OCR, a list of all detected "present" pages and "total" pages from the "Page x of y" at the bottom of each page. Could be used to help determine if pages are missing from logs.
+-   `specials`: A list of any unusual properties of this log. Currently, these could be:
+    -   `NO_ACTIVITIES_RECORDED`: The activities section explicitly says "No activities recorded for this assignment"
+    -   `SOME_MISSING_ACTIVITIES_RECAP`: The activities recap section must be missing some activities, because the scraper did not find the usual footer at the closing of this section
+    -   `NO_ACTIVITIES_DESC`: There is no activity descriptions page
+    -   `REDACTED_ACTIVITIES_DESC`: There is no text on the activity descriptions page; generally this means there is a redactions covering all the text
+    -   `REDACTED_ACTIVITIES_DESC_CONTD`: Same as above, except on the second page of descriptions
 
 ### Brief overview of toCSV.R
 
@@ -150,7 +176,11 @@ For sake of transparency, output from `toCSV.R` will sometimes include metadata 
 
 Additionally, since activities may not always match up to flights, sometimes the columns relevant to the flight will be set to blank or a `?` during joining. All recorded flights and activities will be logged at least once per log, though.
 
-Two more potential activity comments descriptions come from the redaction detection step -- see below.
+Two more potential activity comments descriptions come from the redaction detection step -- see [quantifying redactions](#quantifying-redactions) below.
+
+#### CSV output data format
+
+TODO describe CSV column headers and where they all come from
 
 ### Quantifying redactions {#quantifying-redactions}
 
