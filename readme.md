@@ -122,7 +122,50 @@ Within the main section:
 -   The section is split into sections, each corresponding to a section within the PDF itself (e.g., the table at the beginning describing the overall "flights" of each log; the activites 'recap' section; and the activity descriptions section with more wordy descriptions). The structure of each section is very similar across sections, yet with enough difference that function calls for the "work" of each section would only make the code harder to understand.
 -   A similarly uncommon design decision, there are many literals used within the code that, in general programming practice, would be better declared as named constants. However, each of these literals is used only once, and makes more sense in the context in which it is used (as the sections follow the flow of the PDF order). For debugging potential needs to change pixel offsets for different sections, it is thus more straightforward to edit these literals directly where they're used.
 
-#### logs variable data format
+The result is a [logs variable](#logs-variable-data-format)!
+
+### Brief overview of toCSV.R {#brief-overview-of-tocsv.r}
+
+This file is split into two sections:
+
+-   The initial section checks for some errors that may arise in the output of ExtractTable when detecting tables with potentially ambiguous column headers. It corrects common errors with column counts by adding, for example, dummy columns for data we are not concerned with outputting in toCSV.
+    -   If there are any errors it cannot fix, this section will print them -- these should be addressed by the programmer programmer before running the next section of code
+-   The second section coalesces the different logs into one large dataframe, suitable for conversion to CSV (the final file)
+    -   This involves some more complex logic with, for example, guessing which activities line up to which flights based on times reported. Owing to the nature of the data we have, sometimes activities do not line up to flight times, or visa versa. As such, when building the CSV output, all flights and activities are logged, but sometimes they will not match up cleanly and the output will note this.
+
+For sake of transparency, output from `toCSV.R` will sometimes include metadata about the process of generating a CSV, or when reporting special cases found in processing the file in `main.R`. The following are currently possible outputs that `toCSV.R` will place in the activity description column:
+
+-   "\*\*\*no activities found to match flight #\*\*\*", when a flight is found with no activities to match it
+-   "\*\*\*no activities recorded for this log\*\*\*", when an entire log has no activities recorded
+-   "\*\*\*activity comments page missing for this log\*\*\*", when the entire activity comments page is missing
+-   "\*\*\*activity comments redacted for this log\*\*\*", when all activity comments are redacted for the log
+
+Additionally, since activities may not always match up to flights, sometimes the columns relevant to the flight will be set to blank or a `?` during joining. All recorded flights and activities will be logged at least once per log, though.
+
+Two more potential activity comments descriptions come from the redaction detection step -- see [quantifying redactions](#quantifying-redactions) below.
+
+### Quantifying redactions {#quantifying-redactions}
+
+TODO including
+
+-   imagemagick process
+-   redactions w/in text
+-   row/other redactions
+-   how they're represented
+-   prolly image examples same as slides
+
+### Potential drawbacks
+
+Some areas where this program could be improved upon include:
+
+-   Redaction detection outside of activity comments section, e.g., within metadata sections. This wouldn't be too complicated, it was just not deemed necessary for this specific project.
+-   Detecting checked versus unchecked boxes: this could likely be done locally by determining table bounds and cropping into the boxes, then using AI or even simple edge detection algorithms to find the bounds of the box, and then check whether the inside is entirely white or has a black 'x' inside. We have a data source for the data these boxes represent, so this feature was not developed, but could be useful.
+-   Automation: this program is currently built for manually processing one PDF log at a time. Although this is leagues faster than manually entering data, it could be sped up further by enabling input of many PDFs to yield an output of many CSVs. This may be added in the future!
+-   More broadly, this program is very specific to a certain format of PDF, down to the level of using specific pixel widths and heights, and groups of words, to detect sections within the flight logs. Although this works well for this purpose, it means that most of the program would have to be changed entirely to create a similar scraper for another format. (The overall structure could still be useful as a guide, though.) It could be useful, then, to abstract this program into a more broadly-applicable scraping tool that can handle a variety of formats of PDFs via configuration.
+
+## Data formats
+
+### logs variable data format {#logs-variable-data-format}
 
 The logs variable is the intermediary between the main program, which extracts text and detects redactions, and the smaller secondary script, which converts this data to a CSV format. A logs variable is a list of each detected log on the PDF; each log itself is 2 to 4 PDF pages with different sections of the log:
 
@@ -158,36 +201,75 @@ Finally, each log contains the following variables in addition to each of the se
     -   `REDACTED_ACTIVITIES_DESC`: There is no text on the activity descriptions page; generally this means there is a redactions covering all the text
     -   `REDACTED_ACTIVITIES_DESC_CONTD`: Same as above, except on the second page of descriptions
 
-### Brief overview of toCSV.R
+### CSV output data format
 
-This file is split into two sections:
+The generated CSV has many column headers. Each comes from one, or multiple, of the [logs variable](#logs-variable-data-format) sections. The breakdown is as follows, using the example `23-8654-Final.pdf` log for example log and CSV photos.
 
--   The initial section checks for some errors that may arise in the output of ExtractTable when detecting tables with potentially ambiguous column headers. It corrects common errors with column counts by adding, for example, dummy columns for data we are not concerned with outputting in toCSV.
-    -   If there are any errors it cannot fix, this section will print them -- these should be addressed by the programmer programmer before running the next section of code
--   The second section coalesces the different logs into one large dataframe, suitable for conversion to CSV (the final file)
-    -   This involves some more complex logic with, for example, guessing which activities line up to which flights based on times reported. Owing to the nature of the data we have, sometimes activities do not line up to flight times, or visa versa. As such, when building the CSV output, all flights and activities are logged, but sometimes they will not match up cleanly and the output will note this.
+#### Metadata section
 
-For sake of transparency, output from `toCSV.R` will sometimes include metadata about the process of generating a CSV, or when reporting special cases found in processing the file in `main.R`. The following are currently possible outputs that `toCSV.R` will place in the actvity description column:
+-   The first 17 columns in the CSV match up one-to-one with the metadata table (`meta` log variable) at the top of the log
+    -   date, watch, assign, ac_num, w/c, tfo, tfo_ser_num, tfo_on_duty, tfo_off_duty, pilot, pilot_ser_num, pilot_off_duty, co_pilot, co_pilot_ser_num, co_pilot_on_duty, co_pilot_off_duty
+-   These columns are duplicated across all flights/activities to which they are relevant; most logs have many rows with the same info repeated as a result
 
--   "\*\*\*no activities found to match flight #\*\*\*", when a flight is found with no activities to match it
--   "\*\*\*no activities recorded for this log\*\*\*", when an entire log has no activities recorded
--   "\*\*\*activity comments page missing for this log\*\*\*", when the entire activity comments page is missing
--   "\*\*\*activity comments redacted for this log\*\*\*", when all activity comments are redacted for the log
+![](./images/meta_example_pdf.jpg)
 
-Additionally, since activities may not always match up to flights, sometimes the columns relevant to the flight will be set to blank or a `?` during joining. All recorded flights and activities will be logged at least once per log, though.
+... turns into ...
 
-Two more potential activity comments descriptions come from the redaction detection step -- see [quantifying redactions](#quantifying-redactions) below.
+![](./images/meta_example_csv.jpg)
 
-#### CSV output data format
+#### Description metadata
 
-TODO describe CSV column headers and where they all come from
+-   The next 5 columns are taken from the activity descriptions/comments section (`description_meta` log variable) and are given `full_` prefixes in the CSV as they are repeated or lengthier metadata info from the metadata section above. If the TFO or pilot is redacted before, they're likely redacted here too.
+    -   full_tfo, full_pilot, full_date, full_watch, full_assignment
+-   As before, these columns are duplicated across relevant flights/activities
 
-### Quantifying redactions {#quantifying-redactions}
+![](./images/desc_meta_example_pdf.jpg)
 
-TODO including
+... turns into ...
 
--   imagemagick process
--   redactions w/in text
--   row/other redactions
--   how they're represented
--   prolly image examples same as slides
+![](./images/desc_meta_example_csv.jpg)
+
+#### Aircraft information
+
+-   The following 13 columns are from the aircraft information table (`aircraft` log variable). Note that the last six variables ("AC Man.", "ADAPLog", "FDMS", "CC", "Headsets", and "Panel Cover") from this section are not included as they are check boxes that ExtractTable nor local OCR can easily detect. We can also get this information, ideally, by cross-referencing with other public data, so it was not a priority to extract it.
+    -   flight, flight_time_start, flight_time_end, hobbs_meter_start, hobbs_meter_end, flight_time, fuel_loc, fuel_gal, abort_code, abort_time, main_hobbs_start, maint_hobbs_end, landings
+-   Each of these variables is per-flight; as a result, they are duplicated as necessary to span each activity a flight encompasses. Sometimes there are no matching activities, in which case the flight info is shown once and the activity description reflects this discrepancy. See the [design for toCSV.R](#brief-overview-of-tocsv.r) for more info.
+
+![](./images/aircraft_example_pdf.png)
+
+... turns into (some rows hidden) ...
+
+![](./images/aircraft_example_csv.jpg)
+
+### Activity comments
+
+-   The next four columns are taken from the activity descriptions section (`descriptions` log variable), where much of the interesting data and the word-level redaction detection feature shows up!
+    -   act_no, location, area, comments
+-   Since this variable is the smallest spanning data, there is no duplication of activity comments as with previous sections.
+
+Note this example is from page 13 of the PDF, to show the redaction detection feature!
+
+![](./images/desc_example_pdf.jpg)
+
+... turns into ...
+
+![](./images/desc_example_csv.jpg)
+
+Note that activity comments has a number of possible special cases, two of which are visible in the above example. One of them is that an in-text redaction was detected, which is replaced with [\*\*\*] as described in the [redaction quantification](#quantifying-redactions) section. All the others start and end with three asterisks, and have some special meaning:
+
+-   `no activities found to match flight #x`: A flight is recorded, but its time does not overlap with any of the activities
+-   `no activities recorded for this log`: The log explicitly states that no activities were recorded for the log in text
+-   `activity comments page missing for this log`: The activity comments page is missing
+-   `activity comments redacted for this log`: All activity comments are redacted
+-   `redacted row(s) WxH pixels at (x, y) below i above j`: Detection that an entire row of activity comment(s) was redacted, with reference for where (should also be placed physically between non-redacted comments)
+-   `unknown redaction WxH pixels at (x, y) below i above j`: Same as above, except the detection did not seem wide enough to be a row
+
+### Activity times
+
+-   Only two columns from the "Activities Recap" section (`recap` log variable) are preserved in the CSV output: activity start and end. These are used to match activity numbers to flights, based on flight time start/end. However, not all flight activity times lay within flight bounds as they should, so sometimes activities are without flights and/or flights are without activities. Since this timing is used in CSV generation, it is preserved almost as a metadata variable.
+    -   act_time_start and act_time_end
+-   As a result of matching based on this time variable, sometimes data related to the flight will be unknown for a given activity, and thus the `flight` column will have `?` instead.
+
+### Metadata
+
+-   The final seven columns are metadata generated by the PDF extraction process (`meta` log variable), described in more detail in the [logs variable data format](#logs-variable-data-format) section.
