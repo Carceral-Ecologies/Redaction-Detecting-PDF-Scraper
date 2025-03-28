@@ -4,15 +4,39 @@ Structured text extraction from image-only PDFs using R and the ExtractTable API
 
 This program is built in particular for the format of the LAPD Air Support Division daily log format. It cannot be used with other formats of files without significant modification, although the code structure could be used as useful reference for building a similar PDF scraper for another file format.
 
-For any questions, feel free to contact nikolas [at] ucla [dot] edu or nickshapiro [at] ucla [dot] edu.
+For any questions, please contact nikolas [at] ucla [dot] edu or nickshapiro [at] ucla [dot] edu.
 
-TODO add table of contents
+**Contents**
+
+  - [Running](#running)
+    - [Quick start](#quick-start)
+    - [Dependencies](#dependencies)
+    - [Configuration](#configuration-configuration)
+    - [Usage](#usage)
+      - [Extracting PDF data in main.R](#extracting-pdf-data-in-mainr)
+      - [Converting PDF data to CSV in toCSV.R](#converting-pdf-data-to-csv-in-tocsvr)
+  - [Examples](#examples)
+  - [Design](#design)
+    - [Brief overview of main.R](#brief-overview-of-mainr)
+    - [Brief overview of toCSV.R](#brief-overview-of-tocsvr-brief-overview-of-tocsvr)
+    - [Redaction detection](#redaction-detection-redaction-detection)
+      - [Quantifying redactions](#quantifying-redactions-quantifying-redactions)
+    - [Potential drawbacks](#potential-drawbacks)
+  - [Data formats](#data-formats)
+    - [logs variable data format](#logs-variable-data-format-logs-variable-data-format)
+    - [CSV output data format](#csv-output-data-format)
+      - [Metadata section](#metadata-section)
+      - [Description metadata](#description-metadata)
+      - [Aircraft information](#aircraft-information)
+    - [Activity comments](#activity-comments-activity-comments)
+    - [Activity times](#activity-times)
+    - [Metadata](#metadata)
 
 ## Running
 
 ### Quick start
 
-This is a an abbreviated guide to getting the program running. For more details, see the below sections.
+This is a an abbreviated guide to getting the program running. For more details, see below.
 
 -   Install [R and RStudio](https://posit.co/download/rstudio-desktop/)
 -   Install the pdftools, magick, tidyverse, and tesseract R packages using `install.packages()` in RStudio console
@@ -47,7 +71,7 @@ For in-text redaction detection (detecting black boxes), this R script uses the 
 
 Finally, this program uses an online web service/API called [ExtractTable](https://extracttable.com/) to recognize and extract structured table data from images, with built-in table detection and higher text recognition accuracy than locally. Acquire an API key for "Extra" credits -- you will need roughly 1.3x as many credits as pages of PDF you plan to extract data from, maybe more for testing.
 
-### Configuration {#configuration}
+### Configuration
 
 Minimal configuration is necessary; options are at the top of the `main.R` and `toCSV.R` files in the `src` directory.
 
@@ -106,6 +130,8 @@ Check the `example` directory for example PDFs and their output after running th
     -   You can load the .RDS file in RStudio using [load](https://rstudio-education.github.io/hopr/dataio.html#r-files)
 -   A `.csv` file with the output of converting the above `logs` variable to a CSV in `toCSV.R`
 
+For the `23_8654` example in particular, an `images` folder is also included. This is all of the cropped images from the PDF, as outputted when the `SAVE_IMAGES` configuration option is set to true.
+
 ## Design
 
 ### Brief overview of main.R
@@ -114,17 +140,17 @@ The code itself is largely well-commented within, but a brief overview of the st
 
 -   Configuration options, as described in the [Configuration](#configuration) section above
 -   Accessory functions and setup (such as an enumerator to keep track of current file section)
--   A section for the more complex redaction detection code (see [Quantifying Redactions](#quantifying-redactions))
+-   A section for the more complex redaction detection code (see [Redaction detection](#redaction-detection))
 -   The main section, where pages of the PDF are processed sequentially and text/redactions are extracted
 
 Within the main section:
 
--   The section is split into sections, each corresponding to a section within the PDF itself (e.g., the table at the beginning describing the overall "flights" of each log; the activites 'recap' section; and the activity descriptions section with more wordy descriptions). The structure of each section is very similar across sections, yet with enough difference that function calls for the "work" of each section would only make the code harder to understand.
+-   The primary while loop is split into sections, each corresponding to a section within the PDF itself (e.g., the table at the beginning describing the overall "flights" of each log; the activites 'recap' section; and the activity descriptions section with more wordy descriptions). Each section has a similar structure, yet with enough difference that function calls for the "work" of each section would only make the code harder to understand.
 -   A similarly uncommon design decision, there are many literals used within the code that, in general programming practice, would be better declared as named constants. However, each of these literals is used only once, and makes more sense in the context in which it is used (as the sections follow the flow of the PDF order). For debugging potential needs to change pixel offsets for different sections, it is thus more straightforward to edit these literals directly where they're used.
 
 The result is a [logs variable](#logs-variable-data-format)!
 
-### Brief overview of toCSV.R {#brief-overview-of-tocsv.r}
+### Brief overview of toCSV.R
 
 This file is split into two sections:
 
@@ -142,17 +168,28 @@ For sake of transparency, output from `toCSV.R` will sometimes include metadata 
 
 Additionally, since activities may not always match up to flights, sometimes the columns relevant to the flight will be set to blank or a `?` during joining. All recorded flights and activities will be logged at least once per log, though.
 
-Two more potential activity comments descriptions come from the redaction detection step -- see [quantifying redactions](#quantifying-redactions) below.
+Two more potential activity comments descriptions come from the redaction detection step -- see below.
 
-### Quantifying redactions {#quantifying-redactions}
+### Redaction detection
 
-TODO including
+Beyond detecting when entire sections of the PDF have no text at all, this program detects smaller redactions within the activity descriptions section. The code that does this is in the get_redacted_table function, with the general process as follows:
 
--   imagemagick process
--   redactions w/in text
--   row/other redactions
--   how they're represented
--   prolly image examples same as slides
+-   Use ImageMagick to find black rectangles on the page, and filter to be those of reasonable size to be redactions
+-   Use data from ExtractTable on table, cell, and word coordinates to determine where redactions are within text inside table cells
+-   For each in-text redaction, determine approximately how many characters it is by checking the width of the redacted rectangle and using a metric of characters per pixel of width (see below). Insert the redaction into the text as `[****]`, with each asterisk corresponding to a character of estimated width.
+-   For any remaining redactions (i.e., those that are not within a table cell), determine their locality to other rows within the table and insert [descriptive text](#activity-comments) about the redactions and their size/location:
+    -   If wide enough to be a row, say it is a redacted row
+    -   Else say it is an unknown redaction
+
+#### Quantifying redactions
+
+To get a metric of how many pixels to count as "one character" of redaction:
+
+-   Get output of text from activity descriptions without redactions; run through a simple script to count the frequency of each character. (In particular, I used `23_8654_Final.pdf` with 33 pages as the textual reference)
+-   Measure the width of each character on PDF images, in pixels, taking an average of about 5 measurements of characters
+-   Using character frequencies and widths, calculate the average pixel width of a character. See the [calculation spreadsheet](/example/character_width_calculation.xlsx) for detailed numbers.
+
+Note that this process calculates average character width using non-redacted character frequencies, using this as a notion of character width for redacted text. Of course, we can't measure redacted character frequencies, so this is likely the best approximation we can make.
 
 ### Potential drawbacks
 
@@ -165,7 +202,7 @@ Some areas where this program could be improved upon include:
 
 ## Data formats
 
-### logs variable data format {#logs-variable-data-format}
+### logs variable data format
 
 The logs variable is the intermediary between the main program, which extracts text and detects redactions, and the smaller secondary script, which converts this data to a CSV format. A logs variable is a list of each detected log on the PDF; each log itself is 2 to 4 PDF pages with different sections of the log:
 
