@@ -186,6 +186,7 @@ Beyond detecting when entire sections of the PDF have no text at all, this progr
 To get a metric of how many pixels to count as "one character" of redaction:
 
 -   Get output of text from activity descriptions without redactions; run through a simple script to count the frequency of each character. (In particular, I used `23_8654_Final.pdf` with 33 pages as the textual reference)
+    -   Remove empty or redacted lines of output, lines with just "Extra Patrol" (commonly repeated, throws off metric of average character frequency)
 -   Measure the width of each character on PDF images, in pixels, taking an average of about 5 measurements of characters
 -   Using character frequencies and widths, calculate the average pixel width of a character. See the [calculation spreadsheet](/example/character_width_calculation.xlsx) for detailed numbers.
 
@@ -199,6 +200,7 @@ Some areas where this program could be improved upon include:
 -   Detecting checked versus unchecked boxes: this could likely be done locally by determining table bounds and cropping into the boxes, then using AI or even simple edge detection algorithms to find the bounds of the box, and then check whether the inside is entirely white or has a black 'x' inside. We have a data source for the data these boxes represent, so this feature was not developed, but could be useful.
 -   Automation: this program is currently built for manually processing one PDF log at a time. Although this is leagues faster than manually entering data, it could be sped up further by enabling input of many PDFs to yield an output of many CSVs. This may be added in the future!
 -   More broadly, this program is very specific to a certain format of PDF, down to the level of using specific pixel widths and heights, and groups of words, to detect sections within the flight logs. Although this works well for this purpose, it means that most of the program would have to be changed entirely to create a similar scraper for another format. (The overall structure could still be useful as a guide, though.) It could be useful, then, to abstract this program into a more broadly-applicable scraping tool that can handle a variety of formats of PDFs via configuration.
+    -   This is also the case with redaction detection, as the current detection searches for all-black rectangles, a specific format of redaction that is seemingly done digitally after scanning in the log. Other types of redaction (e.g., with physical ink before scanning) would need a different detection mechanism.
 
 ## Data formats
 
