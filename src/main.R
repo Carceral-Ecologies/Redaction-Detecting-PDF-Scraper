@@ -132,7 +132,10 @@ get_table <- function(image, find_redactions = FALSE) {
   names(table) <- as.integer(names(table)) + 1
   rownames(table) <- as.integer(row.names(table)) + 1
   
-  return (table)
+  return (list(
+    table = table,
+    response = et_resp$full_resp
+  ))
 }
 
 # "crop" Tesseract OCR data to within supplied coordinate bounds (i.e., return

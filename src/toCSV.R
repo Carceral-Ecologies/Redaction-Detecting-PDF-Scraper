@@ -13,7 +13,7 @@ to_csv_logs <- lapply(seq_along(to_csv_logs), function(i) {
   # check for merged headers (e.g., combined Time Start and End columns yielding
   # "Start End" column rather than separate "Start" and "End" columns) and fix
   # them by splitting by space
-  aircraft <- log$aircraft$extracttable_ocr
+  aircraft <- log$aircraft$extracttable_ocr$table
   if (ncol(aircraft) != 19) {
     cols <- aircraft %>%
       sapply(function(x) any(grepl(". [0-9]", x))) %>%
@@ -28,18 +28,18 @@ to_csv_logs <- lapply(seq_along(to_csv_logs), function(i) {
   if (ncol(aircraft) != 19) {
     print(paste(i, 'aircraft table'))
   }
-  log$aircraft$extracttable_ocr <- aircraft
+  log$aircraft$extracttable_ocr$table <- aircraft
   
   
   
   # check all activity descriptions tables have four columns as expected
   if (!all(sapply(log$descriptions$extracttable_ocrs,
-                  function(tib) { ncol(tib) == 4 }))) {
+                  function(tib) { ncol(tib$table) == 4 }))) {
     print(paste(i, 'descriptions table'))
   }
   
   # check for 17 meta table columns, as expected
-  meta <- log$meta$extracttable_ocr
+  meta <- log$meta$extracttable_ocr$table
   if (ncol(meta) != 17 & ncol(meta) >= 14) {
     first_row <- meta[1, 14:ncol(meta)]
     second_row <- meta[2, 14:ncol(meta)]
@@ -63,7 +63,7 @@ to_csv_logs <- lapply(seq_along(to_csv_logs), function(i) {
   if (ncol(meta) != 17) {
     print(paste(i, 'meta table'))
   }
-  log$meta$extracttable_ocr <- meta
+  log$meta$extracttable_ocr$table <- meta
   
   # insert fixed log
   to_csv_logs[[i]] <- log
@@ -98,7 +98,7 @@ for (i in 1:length(to_csv_logs)) {
   
   
   # aircraft info table getting event times
-  flight_times <- log$aircraft$extracttable_ocr
+  flight_times <- log$aircraft$extracttable_ocr$table
   
   if (ncol(flight_times) != 19) {
     stop(paste(i, 'Aircraft info table does not have 19 columns.'))
@@ -149,12 +149,12 @@ for (i in 1:length(to_csv_logs)) {
     # mutate descriptions to contain correct aircraft info log
     descriptions <- log$descriptions$extracttable_ocrs
     
-    if (!all(sapply(descriptions, function(tib) { ncol(tib) == 4 }))) {
+    if (!all(sapply(descriptions, function(tib) { ncol(tib$table) == 4 }))) {
       stop(paste(i, 'Activity descriptions tables do not have 4 columns'))
     }
     
     descriptions <- descriptions %>%
-      lapply(function(tib) { slice(tib, 2:n()) }) %>%
+      lapply(function(tib) { slice(tib$table, 2:n()) }) %>%
       bind_rows() %>%
       left_join(activity_times, by = c(`1` = 'act_no')) %>%
       rowwise() %>%
@@ -205,7 +205,7 @@ for (i in 1:length(to_csv_logs)) {
   # retain original row orderings
   descriptions$order_id <- 1:nrow(descriptions)
   
-  aircraft <- log$aircraft$extracttable_ocr
+  aircraft <- log$aircraft$extracttable_ocr$table
   # already checked columns earlier w flight_times
   
   # cutting off last 6 columns because OCR doesn't pick them up (checkboxes)
@@ -231,7 +231,7 @@ for (i in 1:length(to_csv_logs)) {
   }
   
   # add meta table
-  meta <- log$meta$extracttable_ocr
+  meta <- log$meta$extracttable_ocr$table
   
   if (ncol(meta) != 17) {
     stop(paste(i, 'Meta table does not have 17 columns'))
