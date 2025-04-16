@@ -23,7 +23,7 @@ For any questions, please contact nikolas [at] ucla [dot] edu or nickshapiro [at
       - [Quantifying redactions](#quantifying-redactions-quantifying-redactions)
     - [Potential drawbacks](#potential-drawbacks)
   - [Data formats](#data-formats)
-    - [logs variable data format](#logs-variable-data-format-logs-variable-data-format)
+    - [logs variable data format](#logs-variable-data-format)
     - [CSV output data format](#csv-output-data-format)
       - [Metadata section](#metadata-section)
       - [Description metadata](#description-metadata)
@@ -31,6 +31,8 @@ For any questions, please contact nikolas [at] ucla [dot] edu or nickshapiro [at
     - [Activity comments](#activity-comments-activity-comments)
     - [Activity times](#activity-times)
     - [Metadata](#metadata)
+  - [Contributors](#contributors)
+    - [Acknowledgements](#acknowledgements)
 
 ## Running
 
@@ -64,7 +66,7 @@ This can be accomplished by running the following command in the console:
 install.packages(c('pdftools', 'magick', 'tidyverse', 'tesseract'))
 ```
 
-For in-text redaction detection (detecting black boxes), this R script uses the executable version of ImageMagick as it has more features than the R plugin. As such, you must have [ImageMagick installed](https://imagemagick.org/script/download.php)
+For in-text redaction detection (detecting black boxes), this R script uses the executable version of ImageMagick as it has more features than the R package. As such, you must have [ImageMagick installed](https://imagemagick.org/script/download.php)
 
 -   You can verify whether ImageMagick is installed by running `magick -version` in your terminal. This should result in an info screen about the version installed, not a "command not found" error.
 -   On macOS, the easiest method of installation is to install [Homebrew](https://brew.sh/) and then run `brew install magick` in a terminal.
@@ -155,9 +157,9 @@ The result is a [logs variable](#logs-variable-data-format)!
 This file is split into two sections:
 
 -   The initial section checks for some errors that may arise in the output of ExtractTable when detecting tables with potentially ambiguous column headers. It corrects common errors with column counts by adding, for example, dummy columns for data we are not concerned with outputting in toCSV.
-    -   If there are any errors it cannot fix, this section will print them -- these should be addressed by the programmer programmer before running the next section of code
+    -   If there are any errors it cannot fix, this section will print them -- these should be addressed by the programmer before running the next section of code
 -   The second section coalesces the different logs into one large dataframe, suitable for conversion to CSV (the final file)
-    -   This involves some more complex logic with, for example, guessing which activities line up to which flights based on times reported. Owing to the nature of the data we have, sometimes activities do not line up to flight times, or visa versa. As such, when building the CSV output, all flights and activities are logged, but sometimes they will not match up cleanly and the output will note this.
+    -   This involves some more complex logic with, for example, guessing which activities line up to which flights based on times reported. Owing to the nature of the data we have, sometimes activities do not line up to flight times, or vice versa. As such, when building the CSV output, all flights and activities are logged, but sometimes they will not match up cleanly and the output will note this.
 
 For sake of transparency, output from `toCSV.R` will sometimes include metadata about the process of generating a CSV, or when reporting special cases found in processing the file in `main.R`. The following are currently possible outputs that `toCSV.R` will place in the activity description column:
 
@@ -168,15 +170,15 @@ For sake of transparency, output from `toCSV.R` will sometimes include metadata 
 
 Additionally, since activities may not always match up to flights, sometimes the columns relevant to the flight will be set to blank or a `?` during joining. All recorded flights and activities will be logged at least once per log, though.
 
-Two more potential activity comments descriptions come from the redaction detection step -- see below.
+Two more potential activity comments descriptions come from the redaction detection step -- see below. The full list of potential descriptions are in the [Activity comments](#activity-comments) section.
 
 ### Redaction detection
 
-Beyond detecting when entire sections of the PDF have no text at all, this program detects smaller redactions within the activity descriptions section. The code that does this is in the get_redacted_table function, with the general process as follows:
+Beyond detecting when entire sections of the PDF have no text at all, this program detects smaller redactions within the activity descriptions section. The code that does this is in the `get_redacted_table` function, with the general process as follows:
 
 -   Use ImageMagick to find black rectangles on the page, and filter to be those of reasonable size to be redactions
 -   Use data from ExtractTable on table, cell, and word coordinates to determine where redactions are within text inside table cells
--   For each in-text redaction, determine approximately how many characters it is by checking the width of the redacted rectangle and using a metric of characters per pixel of width (see below). Insert the redaction into the text as `[****]`, with each asterisk corresponding to a character of estimated width.
+-   For each in-text redaction, determine approximately how many characters it is by checking the width of the redacted rectangle and using a metric of characters per pixel of width (see below section). Insert the redaction into the text as `[****]`, with each asterisk corresponding to one estimated redacted character.
 -   For any remaining redactions (i.e., those that are not within a table cell), determine their locality to other rows within the table and insert [descriptive text](#activity-comments) about the redactions and their size/location:
     -   If wide enough to be a row, say it is a redacted row
     -   Else say it is an unknown redaction
@@ -185,12 +187,12 @@ Beyond detecting when entire sections of the PDF have no text at all, this progr
 
 To get a metric of how many pixels to count as "one character" of redaction:
 
--   Get output of text from activity descriptions without redactions; run through a simple script to count the frequency of each character. (In particular, I used `23_8654_Final.pdf` with 33 pages as the textual reference)
-    -   Remove empty or redacted lines of output, lines with just "Extra Patrol" (commonly repeated, throws off metric of average character frequency)
+-   Get output of text from activity descriptions without redactions then run this text through a script to count the frequency of each character. (In particular, I used `23_8654_Final.pdf` with 33 pages as the textual reference)
+    -   Remove empty or redacted lines of output and lines with just "Extra Patrol" (commonly repeated, throws off metric of average character frequency)
 -   Measure the width of each character on PDF images, in pixels, taking an average of about 5 measurements of characters
--   Using character frequencies and widths, calculate the average pixel width of a character. See the [calculation spreadsheet](/example/character_width_calculation.xlsx) for detailed numbers.
+-   Using character frequencies and widths, calculate the average pixel width of a character. See the [calculation spreadsheet](/example/character_width_calculation.xlsx) for full calculations.
 
-Note that this process calculates average character width using non-redacted character frequencies, using this as a notion of character width for redacted text. Of course, we can't measure redacted character frequencies, so this is likely the best approximation we can make.
+Note that this process calculates average character width using *non-redacted* character frequencies, using this as a notion of character width for *redacted* text. Of course, we can't measure redacted character frequencies, so this is likely the best approximation we can make.
 
 ### Potential drawbacks
 
@@ -215,7 +217,7 @@ The logs variable is the intermediary between the main program, which extracts t
 -   `recap_end`: The text at the bottom of the recap section; largely ignored by us
 -   `description_meta`: The text before the activity comments section
     -   Here a table `local_table` is created without ExtractTable since this text is redundant and well-read by the local OCR
--   `descriptions`: The most important component of this program! The activity comments section, with detailed text entries recounting each activity. Here, precise redaction detection is used to detect black boxes within the text
+-   `descriptions`: The most important component of this program! The activity comments section, with detailed text entries recounting each activity. Here, precise redaction detection is used to detect black boxes within the text.
 
 Each of the above variables has the following properties:
 
@@ -237,7 +239,7 @@ Finally, each log contains the following variables in addition to each of the se
     -   `NO_ACTIVITIES_RECORDED`: The activities section explicitly says "No activities recorded for this assignment"
     -   `SOME_MISSING_ACTIVITIES_RECAP`: The activities recap section must be missing some activities, because the scraper did not find the usual footer at the closing of this section
     -   `NO_ACTIVITIES_DESC`: There is no activity descriptions page
-    -   `REDACTED_ACTIVITIES_DESC`: There is no text on the activity descriptions page; generally this means there is a redactions covering all the text
+    -   `REDACTED_ACTIVITIES_DESC`: There is no text on the activity descriptions page within the descriptions area; generally this means there is a redactions covering all the text
     -   `REDACTED_ACTIVITIES_DESC_CONTD`: Same as above, except on the second page of descriptions
 
 ### CSV output data format
@@ -247,7 +249,7 @@ The generated CSV has many column headers. Each comes from one, or multiple, of 
 #### Metadata section
 
 -   The first 17 columns in the CSV match up one-to-one with the metadata table (`meta` log variable) at the top of the log
-    -   date, watch, assign, ac_num, w/c, tfo, tfo_ser_num, tfo_on_duty, tfo_off_duty, pilot, pilot_ser_num, pilot_off_duty, co_pilot, co_pilot_ser_num, co_pilot_on_duty, co_pilot_off_duty
+    -   date, watch, assign, ac_num, w/c, tfo, tfo_ser_num, tfo_on_duty, tfo_off_duty, pilot, pilot_ser_num, pilot_on_duty, pilot_off_duty, co_pilot, co_pilot_ser_num, co_pilot_on_duty, co_pilot_off_duty
 -   These columns are duplicated across all flights/activities to which they are relevant; most logs have many rows with the same info repeated as a result
 
 ![](./images/meta_example_pdf.jpg)
@@ -271,7 +273,7 @@ The generated CSV has many column headers. Each comes from one, or multiple, of 
 #### Aircraft information
 
 -   The following 13 columns are from the aircraft information table (`aircraft` log variable). Note that the last six variables ("AC Man.", "ADAPLog", "FDMS", "CC", "Headsets", and "Panel Cover") from this section are not included as they are check boxes that ExtractTable nor local OCR can easily detect. We can also get this information, ideally, by cross-referencing with other public data, so it was not a priority to extract it.
-    -   flight, flight_time_start, flight_time_end, hobbs_meter_start, hobbs_meter_end, flight_time, fuel_loc, fuel_gal, abort_code, abort_time, main_hobbs_start, maint_hobbs_end, landings
+    -   flight, flight_time_start, flight_time_end, hobbs_meter_start, hobbs_meter_end, flight_time, fuel_loc, fuel_gal, abort_code, abort_time, maint_hobbs_start, maint_hobbs_end, landings
 -   Each of these variables is per-flight; as a result, they are duplicated as necessary to span each activity a flight encompasses. Sometimes there are no matching activities, in which case the flight info is shown once and the activity description reflects this discrepancy. See the [design for toCSV.R](#brief-overview-of-tocsv.r) for more info.
 
 ![](./images/aircraft_example_pdf.png)
@@ -282,11 +284,11 @@ The generated CSV has many column headers. Each comes from one, or multiple, of 
 
 ### Activity comments
 
--   The next four columns are taken from the activity descriptions section (`descriptions` log variable), where much of the interesting data and the word-level redaction detection feature shows up!
+-   The next four columns are taken from the activity descriptions section (`descriptions` log variable), where much of the interesting data and the word-level redaction detection feature shows up.
     -   act_no, location, area, comments
 -   Since this variable is the smallest spanning data, there is no duplication of activity comments as with previous sections.
 
-Note this example is from page 13 of the PDF, to show the redaction detection feature!
+Note this example is from page 13 of the PDF, to show the redaction detection feature.
 
 ![](./images/desc_example_pdf.jpg)
 
@@ -312,3 +314,21 @@ Note that activity comments has a number of possible special cases, two of which
 ### Metadata
 
 -   The final seven columns are metadata generated by the PDF extraction process (`meta` log variable), described in more detail in the [logs variable data format](#logs-variable-data-format) section.
+
+
+## Contributors
+<!-- ALL-CONTRIBUTORS-LIST:START -->
+| Contributions | Name |
+| ----: | :---- |
+| [📖](# "Documentation") [💻](# "Code") | Nik Brandt |
+| [📆](# "Project Management") [🤔](# "Ideas and Planning") | Nick Shapiro |
+
+
+<!-- ALL-CONTRIBUTORS-LIST:END -->
+
+(For a key to the contribution emoji or more info on this format, check out [“All Contributors.”](https://allcontributors.org/docs/en/emoji-key))
+
+### Acknowledgements 
+Thank you to Michael Everett for providing a code jumping off point and introduction to using R and ExtractTable for text recognition in tables.
+
+Thank you to Rachel Smith for review, feedback, and general logistics support.
