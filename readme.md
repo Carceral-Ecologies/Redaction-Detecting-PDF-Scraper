@@ -321,6 +321,7 @@ Note that activity comments has a number of possible special cases, two of which
 | Contributions | Name |
 | ----: | :---- |
 | [📖](# "Documentation") [💻](# "Code") | Nik Brandt |
+| [🤔](# "Ideas and Planning") [💻](# "Code") | Michael Everett |
 | [📆](# "Project Management") [🤔](# "Ideas and Planning") | Nick Shapiro |
 
 
@@ -329,6 +330,4 @@ Note that activity comments has a number of possible special cases, two of which
 (For a key to the contribution emoji or more info on this format, check out [“All Contributors.”](https://allcontributors.org/docs/en/emoji-key))
 
 ### Acknowledgements 
-Thank you to Michael Everett for providing a code jumping off point and introduction to using R and ExtractTable for text recognition in tables.
-
 Thank you to Rachel Smith for review, feedback, and general logistics support.
